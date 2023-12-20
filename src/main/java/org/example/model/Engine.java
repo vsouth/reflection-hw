@@ -1,5 +1,6 @@
 package org.example.model;
 
+import org.example.annotations.Autowired;
 import org.example.annotations.Component;
 
 @Component("Engine")

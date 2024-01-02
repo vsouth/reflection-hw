@@ -8,10 +8,11 @@ import org.reflections.scanners.SubTypesScanner;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
-
-import static java.util.stream.Collectors.toList;
+import java.util.stream.Stream;
 
 public class Context {
     private Map<String, Class<?>> loadedClasses;
@@ -31,8 +32,7 @@ public class Context {
         return loadedClasses;
     }
 
-    public Object get(String className) throws NoSuchMethodException,
-            InvocationTargetException, InstantiationException, IllegalAccessException {
+    public Object get(String className) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
         if (!loadedClasses.containsKey(className)) {
             throw new RuntimeException("Нет такого объекта");
         }
@@ -44,47 +44,35 @@ public class Context {
                 .findFirst();
 
         if (annotatedConstructor.isPresent()) {
-            return createAnnotatedContsructorObject(annotatedConstructor);
+            var constructor = annotatedConstructor.get();
+            var parameterTypes = constructor.getParameterTypes();
+            var params = Arrays.stream(parameterTypes)
+                    .map(
+                            cl -> {
+                                try {
+                                    return get(cl.getAnnotation(Component.class).value());
+                                } catch (Exception e) {
+                                    throw new RuntimeException("Такой тип нельзя подставлять как параметр");
+                                }
+                            }
+
+                    ).collect(Collectors.toList());
+            return constructor.newInstance(params.toArray());
         } else {
-            return createDefaultConstructorObject(clazz);
+            Constructor<?> constructor = clazz.getConstructor();
+            Object instance = clazz.getConstructor().newInstance();
+            Arrays.stream(clazz.getDeclaredFields())
+                    .filter(field -> field.isAnnotationPresent(Autowired.class))
+                    .forEach((field) -> {
+                        field.setAccessible(true);
+                        try {
+                            field.set(instance, get(field.getType().getAnnotation(Component.class).value()));
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+            return instance;
         }
     }
 
-    private Object createAnnotatedContsructorObject(Optional<Constructor<?>> annotatedConstructor)
-            throws InvocationTargetException, InstantiationException, IllegalAccessException {
-        var constructor = annotatedConstructor.get();
-        var parameterTypes = constructor.getParameterTypes();
-        var params = Arrays.stream(parameterTypes)
-                .map(
-                        cl -> {
-                            try {
-                                return get(cl.getAnnotation(Component.class).value());
-                            } catch (Exception e) {
-                                throw new RuntimeException("Такой тип нельзя подсавлять как параметр");
-                            }
-                        }
-
-                ).collect(toList());
-        return constructor.newInstance(params.toArray());
-    }
-
-    private Object createDefaultConstructorObject(Class<?> clazz) throws NoSuchMethodException,
-            InvocationTargetException, InstantiationException, IllegalAccessException {
-        var annotatedFields = Arrays.stream(clazz.getDeclaredFields())
-                .filter(field -> field.isAnnotationPresent(Autowired.class))
-                .collect(toList());
-        var instance = clazz.getConstructor().newInstance();
-
-        annotatedFields.stream()
-                .forEach(field -> {
-                    field.setAccessible(true);
-                    try {
-                        field.set(instance, get(field.getType().getAnnotation(Component.class).value()));
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-
-        return instance;
-    }
 }

@@ -5,14 +5,12 @@ import org.example.annotations.Component;
 
 @Component("Car")
 public class Car {
+    @Autowired
     private Body body;
+    @Autowired
     private Engine engine;
 
-    @Autowired
-    public Car(Body body, Engine engine) {
-        this.body = body;
-        this.engine = engine;
-    }
+
 
     public Body getBody() {
         return body;

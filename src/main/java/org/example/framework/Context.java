@@ -5,10 +5,14 @@ import org.example.annotations.Component;
 import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Context {
     private Map<String, Class<?>> loadedClasses;
@@ -48,14 +52,26 @@ public class Context {
                                 try {
                                     return get(cl.getAnnotation(Component.class).value());
                                 } catch (Exception e) {
-                                    throw new RuntimeException("Такой тип нельзя подсавлять как параметр");
+                                    throw new RuntimeException("Такой тип нельзя подставлять как параметр");
                                 }
                             }
 
                     ).collect(Collectors.toList());
             return constructor.newInstance(params.toArray());
         } else {
-            return clazz.getConstructor().newInstance();
+            Constructor<?> constructor = clazz.getConstructor();
+            Object instance = clazz.getConstructor().newInstance();
+            Arrays.stream(clazz.getDeclaredFields())
+                    .filter(field -> field.isAnnotationPresent(Autowired.class))
+                    .forEach((field) -> {
+                        field.setAccessible(true);
+                        try {
+                            field.set(instance, get(field.getType().getAnnotation(Component.class).value()));
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+            return instance;
         }
     }
 
